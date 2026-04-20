@@ -1,6 +1,84 @@
 #!/bin/bash
 set -euo pipefail
 
+compare_paths() {
+    local lhs="$1"
+    local rhs="$2"
+    local out_csv="$3"
+    local rc
+
+    if [ -f "$lhs" ] && [ -f "$rhs" ]; then
+        if diff <(tail -n +2 "$lhs") <(tail -n +2 "$rhs") > /dev/null; then
+            echo -n 0 >> "$out_csv"
+        else
+            rc=$?
+            if [ "$rc" -eq 1 ]; then
+                echo -n 1 >> "$out_csv"
+            else
+                echo "diff failed with exit code $rc while comparing files '$lhs' and '$rhs'" >&2
+                exit "$rc"
+            fi
+        fi
+
+    elif [ -d "$lhs" ] && [ -d "$rhs" ]; then
+        if compare_dirs_skip_first_line "$lhs" "$rhs"; then
+            echo -n 0 >> "$out_csv"
+        else
+            rc=$?
+            if [ "$rc" -eq 1 ]; then
+                echo -n 1 >> "$out_csv"
+            else
+                echo "directory comparison failed with exit code $rc for '$lhs' and '$rhs'" >&2
+                exit "$rc"
+            fi
+        fi
+
+    else
+        echo "Cannot compare '$lhs' and '$rhs': both must be files or both must be directories" >&2
+        exit 2
+    fi
+}
+
+compare_dirs_skip_first_line() {
+    local dir1="$1"
+    local dir2="$2"
+    local rel file1 file2
+
+    while IFS= read -r -d '' file1; do
+        rel="${file1#$dir1/}"
+        file2="$dir2/$rel"
+
+        if [ ! -e "$file2" ]; then
+            echo "Missing in second directory: $rel" >&2
+            return 1
+        fi
+
+        if [ -f "$file1" ] && [ -f "$file2" ]; then
+            if ! diff <(tail -n +2 "$file1") <(tail -n +2 "$file2") > /dev/null; then
+                rc=$?
+                if [ "$rc" -eq 1 ]; then
+                    echo "Files differ: $rel" >&2
+                    return 1
+                else
+                    return "$rc"
+                fi
+            fi
+        fi
+    done < <(find "$dir1" -type f -print0)
+
+    while IFS= read -r -d '' file2; do
+        rel="${file2#$dir2/}"
+        file1="$dir1/$rel"
+
+        if [ ! -e "$file1" ]; then
+            echo "Missing in first directory: $rel" >&2
+            return 1
+        fi
+    done < <(find "$dir2" -type f -print0)
+
+    return 0
+}
+
 environment=$1      #local or cluster
 csvname=$2          
 input=$3            #Input file name
@@ -54,7 +132,7 @@ do
             echo Analyzing threads = $thread
             ./AMDAT -n $thread -i $iInput > /dev/null 2>> $csv
             echo -n , >> $csv
-            diff <(tail -n +2 "$iOutput") <(tail -n +2 "$bOutput") > /dev/null && echo -n 0 >> "$csv_validation" || echo -n 1 >> "$csv_validation"
+            compare_paths "$iOutput" "$bOutput" "$csv_validation"
             echo -n , >> $csv_validation
         done
 
