@@ -26,3 +26,9 @@ timegaps=(10 20 30)
 
 6. Runs submit.sh
 
+## Illustration
+
+<img width="700" height="450" alt="runtimernf" src="https://github.com/user-attachments/assets/597a1f4a-5629-4767-b158-4b0b1cbcc552" />
+<img width="700" height="450" alt="speeduprdf" src="https://github.com/user-attachments/assets/94659470-4b8d-45eb-84bf-ce29d47a0722" />
+
+
